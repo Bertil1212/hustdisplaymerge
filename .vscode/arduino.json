@@ -1,0 +1,7 @@
+{
+    "configuration": "mode=on",
+    "board": "arduino:megaavr:nona4809",
+    "programmer": "medbg",
+    "port": "COM6",
+    "sketch": "Hust_Display\\Hust_Display.ino"
+}
