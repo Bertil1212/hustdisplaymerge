@@ -3,34 +3,23 @@
 #include "Functions.h"
 #include <Wire.h>
 #include "buffer.h"
-#define INCREAMENT_CRUISE_CONTROL_2 2 // Increament curise control, switch screen
-#define HIGH_BEAM_3 3 // High Beam 
-
-#define ECO_OR_RACING_5 5 // ECO or Racing mode
-#define CRUISE_CONTROL_6 6 // Cruise control
-
-#define HORN_BUTTON_8 8 
-#define HIGH_VOLTAGE_9 9 
-#define DECREAMENT_CRUISE_CONTROL_17 17 // Decreament cruise control 
-#define BLINK_LEFT_20 20
-
-
-#define DRIVE_MODE_7 7 // Mode: Drive, 1
-#define REVERSE_MODE_4 4 // Mode: reverse, 2
-#define NEUTRAL_MODE_21 21 // Mode: Neutral, 2
-
-//Analog pin to read which mode, < 250 reverse,    250-750 neutral,   >750 drive   
-#define modePot 22
-
+#define BUTTON_SWITCH_SCREEN_PIN 4
+#define ORANGE_BUTTON_7 7
+#define YELLOW_BUTTON_6 6
+#define BROWN_BUTTON_5 5
+//#define GREEN_BUTTON_4 4
+#define ORANGE_BUTTON3 3
+#define RED_BUTTON_2 2
+#define PURPLE_BUTTON_17 17
+#define BLINK_RIGHT 9
+#define BLINK_LEFT 20
+//#define DRIVE
+//define REVERSE
+//#define NEUTRAL
 
 //Saved
 /* In Functions.cpp the functions wirtten written beyond riverdi github can be found*/
 
-
-
-//make sure the pot is set to  !neutral -> then neutral. This starts moves to next screen
-//0 begining, 1 pot has been set to not neutral, 2 back to neutral now the screen can change.
-int potStep = 0;
 
 /*----- I2C ECU --------*/
 /* Transmit on channel 9 and receive on channel 10*/
@@ -45,22 +34,27 @@ void values_screen();
 
 static byte rgb_yellow[] = {230, 230, 50};
 static byte rbg_red[] = {250, 20, 1};
-static byte rgb_white[] = {250, 250, 250};
 float max_gas = 1;
 float min_gas = 2000;
 float max_break = 0;
 float min_break = 2000;
 float current = 0;
+//float velocity = 30;
 float voltage_diff = 20;
+//float battery_voltage = 20;
+float battery_voltage_max = 100;
 float mc_watt = 20;
 //current voltage
 float mc_watt_max = 100;
 float solar_watt = 20;
 float solar_watt_max = 100;
+//float battery_tempereature;
+//float solar_temperature_front;
+//float solar_temperature_back;
+//float bms_temperature;
 float gas_potential;
 float break_potential;
 float last_brake_potential = 1/1337;
-int economy_value = 0;
 /*---------------------- CANBUS ----------------------*/
 // Motor Controller
 double HeatsinkTemp = 0.0; //
@@ -119,23 +113,19 @@ bool start_screen_flag = true;
 bool main_screen_flag = false;
 bool init_i2c_channel_10 = true;
 bool high_beam_flag = false;
-bool high_voltage_flag = false;
-bool battery_error_flag = false;
-bool mc_error_flag = false;
-bool solar_error_flag = false;
-bool driving_mode_error_flag = false;
-bool error_flag = false;
+bool high_voltage_flag = true;
+bool battery_error_flag = true;
+bool mc_error_flag = true;
+bool solar_error_flag = true;
+bool driving_mode_error_flag = true;
+bool error_flag = true;
 bool cruise_control_flag = false;
 /*--- Eco 0 Race 1 ---*/
 bool eco_or_race_mode_flag = true;
 bool right_blinker_flag = false;
 bool left_blinker_flag = false;
-bool hazard_lights_flag = false;
+bool hazard_lights = false;
 bool potentiometer_flag = false;
-
-/*----- Variables for handeling buttons ----*/
-unsigned long lastPressed = 0.0;
-unsigned long timeATM = 0.0;
 
 
 String global_data = "";
@@ -145,6 +135,8 @@ String global_data = "";
 void setup() {
   phost = &host;
   SPI.begin();
+  //Wire.begin(8);
+  //Wire.onReceive(i2c_potentials);
   /* Init HW Hal */
   App_Common_Init(&host);
   Serial.begin(19200);
@@ -159,38 +151,24 @@ void setup() {
 
 void i2c_request() {
   float gas_to_send = calc_potentials(gas_potential, min_gas, max_gas);
-  if(gas_to_send < 10){
-    gas_to_send = 0;
-  }
   float break_to_send = calc_potentials(break_potential, min_break, max_break);
-  if(gas_to_send > 0 || break_to_send < 10){
-    break_to_send = 0;
-  }
 
-  int gas = int(gas_to_send/4);
-  //////Serial.println("Gas: " + String(gas));
-  int breaks = int(break_to_send/4);
-  //////Serial.println("Break: " + String(breaks));
+  int gas = int(gas_to_send);
+  Serial.println("Gas: " + String(gas));
+  
+  int breaks = int(break_to_send);
+  Serial.println("Break: " + String(breaks));
   int driving = int(driving_mode_counter);
-  //////Serial.println("Mode: " + String(driving));
+  Serial.println("Mode: " + String(driving));
   int cruise = int(cruise_control_flag);
-  //////Serial.println("Cruise control: " + String(cruise_control_flag));
+  Serial.println("Cruise control: " + String(cruise_control_flag));
   int eco = int(eco_or_race_mode_flag);
-  //////Serial.println("Race mode: " + String(eco_or_race_mode_flag));
+  Serial.println("Race mode: " + String(eco_or_race_mode_flag));
   int start = int(start_screen_flag);
-  //////Serial.println("Start mode: " + String(start_screen_flag));
+  Serial.println("Start mode: " + String(start_screen_flag));
   int cruise_velocity = int(cruise_control_velocity);
-  //////Serial.println("Cruise velocity: " + String(cruise_velocity));
-  int right_blinker = int(right_blinker_flag);
-  //////Serial.println("Right blinker: " + String(right_blinker_flag));
-  int left_blinker = int(left_blinker_flag);
-  //////Serial.println("Left blinker: " + String(left_blinker_flag));
-  int hazard_lights = int(hazard_lights_flag);
-  //////Serial.println("Hazard lights: " + String(hazard_lights_flag));
-  int high_beam = int(high_beam_flag);
-  //////Serial.println("High beam: " + String(high_beam_flag));
-  int HV = int(high_voltage_flag);
-  //////Serial.println("High Voltage: " + String(high_voltage_flag)); 
+  Serial.println("Cruise velocity: " + String(cruise_velocity));
+
   //Wire.beginTransmission();
   Wire.write(gas);
   Wire.write(breaks);
@@ -199,14 +177,24 @@ void i2c_request() {
   Wire.write(eco);
   Wire.write(start);
   Wire.write(cruise_velocity);
-  Wire.write(right_blinker);
-  Wire.write(left_blinker);
-  Wire.write(hazard_lights);
-  Wire.write(high_beam);
-  Wire.write(HV);
   //Wire.endTransmission();
 }
 
+
+
+/* On receive function */
+void i2c_potentials() {
+  String data_received_String = "";
+  while (Wire.available()) {
+    char char_received = Wire.read();
+    //data_received_i2c_channel_10 += char_received;
+  }
+  //global_data = data;
+  //data_received_flag = true;
+  //Serial.println(data_received_i2c_channel_10);
+
+  //i2c_data_handler(data);
+}
 
 void I2C_receive() 
 {
@@ -240,8 +228,8 @@ void I2C_receive()
       break;
     }
   }
-  //////Serial.println("--------------");
-  ////Serial.println(ID + " " + data);
+  Serial.println("--------------");
+  Serial.println(ID + " " + data);
   update_data(ID, data);  
 }
 
@@ -257,18 +245,34 @@ void handle_driving_mode_flag() {
 
 
 void init_buttons() { 
-  pinMode(INCREAMENT_CRUISE_CONTROL_2, INPUT_PULLUP);
-  pinMode(HIGH_BEAM_3, INPUT_PULLUP);
-  pinMode(REVERSE_MODE_4, INPUT_PULLUP);
-  pinMode(ECO_OR_RACING_5, INPUT_PULLUP);
-  pinMode(CRUISE_CONTROL_6, INPUT_PULLUP);
-  pinMode(DRIVE_MODE_7, INPUT_PULLUP);
-  pinMode(HORN_BUTTON_8, INPUT_PULLUP);
-  pinMode(HIGH_VOLTAGE_9, INPUT_PULLUP);
-  pinMode(DECREAMENT_CRUISE_CONTROL_17, INPUT_PULLUP);
-  pinMode(NEUTRAL_MODE_21, INPUT_PULLUP);
+  pinMode(BUTTON_SWITCH_SCREEN_PIN, INPUT_PULLUP);
+  pinMode(ORANGE_BUTTON_7, INPUT_PULLUP);
+  pinMode(YELLOW_BUTTON_6, INPUT_PULLUP);
+  pinMode(BROWN_BUTTON_5, INPUT_PULLUP);
+  pinMode(ORANGE_BUTTON3, INPUT_PULLUP);
+  pinMode(RED_BUTTON_2, INPUT_PULLUP);
+  pinMode(PURPLE_BUTTON_17, INPUT_PULLUP);
 }
 
+/* Handles the data received for the start screen */
+void i2c_data_handler(String data) {
+  if (data[0] == '.') {  // Gas
+    float gas = data.substring(1).toFloat();
+    //gas_arr[counter_gas] = gas;
+    //counter_gas++;
+    gas_buffer.add(gas);
+    counter_gas++;
+  } else if (data[0] == ',') {  // Velocity
+    float ampere = data.substring(1).toFloat();
+    current = ampere;
+    update_screen_flag = true;
+  } else {  // breaks
+    float breaks = data.toFloat();
+    //break_arr[counter_break] = breaks;
+    break_buffer.add(breaks);
+    counter_break++;
+  }
+}
 
 /* Updates gas and break potentials */
 void update_minmax_potentials(float mean, int identifier) {
@@ -304,34 +308,21 @@ void loop() {
   if (intro) {
     //App_Show_Logo(&host);
     intro = false;
-    ////Serial.println("Start");
+    Serial.println("Start");
     //start_screen();
   }
   
    /* ------------- Start screen ---------------*/   
    if(start_screen_flag) {
      start_screen();
-     gas_buffer.add(1023-analogRead(A6));
-     break_buffer.add(1023-analogRead(A7));
+     gas_buffer.add(analogRead(A1));
+     break_buffer.add(analogRead(A2));
      pot_counter++;
-     if(potStep == 0 && driving_mode_counter != 2){
-      potStep = 1;
-     }else if(potStep == 1 && driving_mode_counter == 2){
-      potStep = 2;
-     }
-
-     if(potStep == 2) {
-       if(potentiometer_flag) {
-         main_screen_flag = true;
-         start_screen_flag = false;
-         ////Serial.println("Screen changing");
-       }       
-     }
    }
 
-    //If pot + and - is switched remove -1023
-   gas_potential = 1023-analogRead(A6);
-   break_potential = 1023-analogRead(A7);
+   gas_potential = analogRead(A1);
+   break_potential = analogRead(A2);
+
    if(pot_counter >= 10 && start_screen_flag) {
      float mean_gas = gas_buffer.get_mean();
      float mean_break = break_buffer.get_mean();
@@ -355,197 +346,160 @@ void loop() {
   }
   
 
+  /* Handle new data received from i2c */
+  if(data_received_flag && start_screen_flag) {
+    i2c_data_handler(global_data);
+    data_received_flag = false;
+    Serial.println("Data received");
+  }
+
   /* Update screen if flags */
   if(update_screen_flag && start_screen_flag) {
     start_screen();
     update_screen_flag = false;
   }
 
+  /* Init the i2c communication on channel 10  and button*/  
+    if(init_i2c_channel_10) {
+    //This should pu start flag to true
+    //start_screen_flag = true;
+    //main_screen_flag = true;
+    //start_i2c_communication_channel_10();
+    //start_button_com();
+    init_i2c_channel_10 = false;
+  }
+
   /*----- Switch Screen Button ----------*/
-  if((max_break - min_break) >= 100 && (max_gas - min_gas) >= 100) {
+  if((max_break - min_break) >= 500 && (max_gas - min_gas) >= 500) {
     potentiometer_flag = true;
   }
 
-  
+  byte switch_screen_button = digitalRead(BUTTON_SWITCH_SCREEN_PIN);
+  if(switch_screen_button == LOW) {
+    Serial.println("Screen changing");
+    if(start_screen_flag) {
+      if(!potentiometer_flag) {
 
-
-  /*---- if statement for button time control ------*/
-  timeATM = millis();
-  if(timeATM - lastPressed > 300) {
-
-    /*------ High voltage and Horn Button --------*/
-    /*---- Horn button is redundant? ---------*/
-    byte horn_button = digitalRead(HORN_BUTTON_8);
-    if(horn_button == LOW) {
-      ////Serial.println("Tuuut");      
-    }
-
-    byte high_voltage_button = digitalRead(HIGH_VOLTAGE_9);
-    if(high_voltage_button == LOW) {
-      if(high_voltage_flag) {
-        high_voltage_flag = false;
       } else {
-        high_voltage_flag = true;
+      start_screen_flag = false;
+      main_screen_flag = true;
       }
-    } 
-
-    /*----- Driving Mode Button Button ----------*/
-    //driving_mode_counter 
-    //0 reverse    1 drive  2 Neutral
-    int mode = analogRead(modePot);
-    if(mode < 250){
-      driving_mode_counter = 0;
-    }else if(mode > 750){
-      driving_mode_counter = 1;
     } else {
-      driving_mode_counter = 2;
+      main_screen_flag = false;
+      start_screen_flag = true;
     }
-/*
-    byte drive_mode_button = digitalRead(DRIVE_MODE_7);
-    if(drive_mode_button == LOW) {
-      driving_mode_counter = 1;
-    }
-
-    byte reverse_mode_button = digitalRead(REVERSE_MODE_4);
-    if(reverse_mode_button == LOW) {
-      driving_mode_counter = 0;
-    }
-
-    byte neutral_mode_button = digitalRead(NEUTRAL_MODE_21);
-    if(neutral_mode_button == LOW) {
-      driving_mode_counter = 2;
-    }
-*/
-    /*----- Cruise Control Button ----------*/
-    byte cruise_control_button = digitalRead(CRUISE_CONTROL_6);
-    if(cruise_control_button == LOW) {
-      if(cruise_control_flag) {
-        cruise_control_flag = false;
-      } else {
-        cruise_control_flag = true;
-      }    
-      ////Serial.println(cruise_control_flag);
-    }
-
-    byte increment_cruise_control_button = digitalRead(INCREAMENT_CRUISE_CONTROL_2);
-    if(increment_cruise_control_button == LOW && cruise_control_flag) {
-      cruise_control_velocity++;
-      ////Serial.println(cruise_control_velocity);
-    } 
-
-    byte decrement_cruise_control_button = digitalRead(DECREAMENT_CRUISE_CONTROL_17);
-    if(decrement_cruise_control_button == LOW && cruise_control_flag) {
-      if(cruise_control_velocity <= 0) {
-        ////Serial.println("Cant decrease");
-      } else {
-        cruise_control_velocity--;
-        ////Serial.println(cruise_control_velocity);
-      }  
-    }
-
-    
-    /*----- Eco mode or racing mode Button ----------*/
-    byte eco_or_racing_button = digitalRead(ECO_OR_RACING_5);
-    if(eco_or_racing_button == LOW) {
-      if(eco_or_race_mode_flag) {
-        eco_or_race_mode_flag = false;
-      } else {
-        eco_or_race_mode_flag = true;
-      }
-      ////Serial.println(eco_or_race_mode_flag);
-    }
-
-    /*------------------- High Beam Button -------------------*/
-    byte high_beam_button = digitalRead(HIGH_BEAM_3);
-    if(high_beam_button == LOW) {
-      if(high_beam_flag) {
-        high_beam_flag = false;
-      } else {
-        high_beam_flag = true;
-      }
-      ////Serial.println(high_beam_flag);
-    }
-
-    /*------------------------ BLINKER BUTTONS ------------------------*/
-    /*
-    byte right_blinker_button = digitalRead(BLINK_RIGHT);
-    if(right_blinker_button == LOW) {
-      if(right_blinker_flag) {
-        right_blinker_flag = false;
-      } else {
-        right_blinker_flag = true;
-      }
-      ////Serial.println("Right blinker");
-      delay(300);
-    }
-
-    byte left_blinker_button = digitalRead(BLINK_LEFT);
-    if(left_blinker_button == LOW) {
-      if(left_blinker_flag) {
-        left_blinker_flag = true; 
-      } else {
-        left_blinker_flag = false;
-      }
-      ////Serial.println("Left blinker");
-      delay(300);
-    }
-    */
-    
-    int buttonValue = analogRead(A0);
-    //////Serial.println(buttonValue);
-    if(buttonValue >= 1000) {
-      if(hazard_lights_flag) {
-        hazard_lights_flag = false;
-      } else {
-        hazard_lights_flag = true;
-      }
-      ////Serial.println("Hazard lights: " + String(hazard_lights_flag));
-      //delay(100);
-    } else if(buttonValue >= 800 && buttonValue < 1000) {
-      if(right_blinker_flag) {
-        right_blinker_flag = false;
-      } else {
-        right_blinker_flag = true;
-      }    
-      ////Serial.println("Right blinker: " + String(right_blinker_flag));
-      //delay(100);
-    } else if(buttonValue > 150 && buttonValue < 800) {
-      if(left_blinker_flag) {
-        left_blinker_flag = false;
-      } else {
-        left_blinker_flag = true;
-      }
-      ////Serial.println("Left blinker: " + String(left_blinker_flag));
-    }
-
-    lastPressed = millis();
+    delay(500);
   }
 
-  /*---- Crusie control ------*/
+  /*----- Driving Mode Button Button ----------*/
+  byte driving_mode_button = digitalRead(ORANGE_BUTTON_7);
+  if(driving_mode_button == LOW) {
+    driving_mode_counter++;
+    if(driving_mode_counter >= 3) {
+      driving_mode_counter = 0;
+    }
+    Serial.println(driving_mode_counter);
+    delay(500);
+  }
+
+  /*----- Cruise Control Button ----------*/
+  byte cruise_control_button = digitalRead(YELLOW_BUTTON_6);
+  if(cruise_control_button == LOW) {
+    if(cruise_control_flag) {
+      cruise_control_flag = false;
+    } else {
+      cruise_control_flag = true;
+    }    
+    Serial.println(cruise_control_flag);
+    delay(500);
+  }
+
+  byte increment_cruise_control_button = digitalRead(RED_BUTTON_2);
+  if(increment_cruise_control_button == LOW && cruise_control_flag) {
+    cruise_control_velocity++;
+    Serial.println(cruise_control_velocity);
+    delay(300);
+  } 
+
+  byte decrement_cruise_control_button = digitalRead(PURPLE_BUTTON_17);
+  if(decrement_cruise_control_button == LOW && cruise_control_flag) {
+    if(cruise_control_velocity <= 0) {
+      Serial.println("Cant decrease");
+    } else {
+      cruise_control_velocity--;
+      Serial.println(cruise_control_velocity);
+    }  
+    delay(300);
+  }
+  
   if(!cruise_control_flag)
   {
-    cruise_control_velocity = VehicleVelocity;
+    cruise_control_velocity = 100;
   } 
 
   if((break_potential-40 > last_brake_potential) && last_brake_potential != 1/
   1337) {cruise_control_flag = 0;}
   last_brake_potential = break_potential;
-  
 
-  /* Calculations for economy meter */
   
-  solar_watt = MPPTOutputCurrent*MPPTOutputVoltage;
-  mc_watt = BusCurrent*BusVoltage;
-  economy_value = map(solar_watt-mc_watt, -10000, 10000, 180, 300);
-  
+  /*----- Eco mode or racing mode Button ----------*/
+  byte eco_or_racing_button = digitalRead(BROWN_BUTTON_5);
+  if(eco_or_racing_button == LOW) {
+    if(eco_or_race_mode_flag) {
+      eco_or_race_mode_flag = false;
+    } else {
+      eco_or_race_mode_flag = true;
+    }
+    Serial.println(eco_or_race_mode_flag);
+    delay(500);
+  }
 
+  /*------------------- High Beam Button -------------------*/
+  byte high_beam_button = digitalRead(ORANGE_BUTTON3);
+  if(high_beam_button == LOW) {
+    if(high_beam_flag) {
+      high_beam_flag = false;
+    } else {
+      high_beam_flag = true;
+    }
+    Serial.println(high_beam_flag);
+    delay(500);
+  }
+
+  /*------------------------ BLINKER BUTTONS ------------------------*/
+  byte right_blinker_button = digitalRead(BLINK_RIGHT);
+  if(right_blinker_button == LOW) {
+    if(right_blinker_flag) {
+      right_blinker_flag = false;
+    } else {
+      right_blinker_flag = true;
+    }
+    delay(300);
+  }
+
+  byte left_blinker_button = digitalRead(BLINK_LEFT);
+  if(left_blinker_button == LOW) {
+    if(left_blinker_flag) {
+      left_blinker_flag = true; 
+    } else {
+      left_blinker_flag = false;
+    }
+    delay(300);
+  }
+  /*
+  if(right_blinker_flag) {
+    Flash_Light(700, BLINK_RIGHT);
+  }
+
+  if(left_blinker_button) {
+    Flash_Light(700, BLINK_LEFT);
+  }
+  */
   /* ---------------- Handeling for error flags ------------------ */
   /* Check all the temperatures and update flags */
   /* ------------- MC ----------- */
   if(HeatsinkTemp > 50 || MotorTemp > 50) {
     mc_error_flag = true;
-  } else {
-    mc_error_flag = false;
   }
 
   /* ------------ BMS ----------- */
@@ -557,22 +511,12 @@ void loop() {
     
   if(HighTemperature >= 60 || InternalTemperature >= 60 || HighTemperature - LowTemperature >= 20) {
     battery_error_flag = true;
-  } else {
-    battery_error_flag = false;
   }
-  /*
-  solar_error_flag = true;
-  bool driving_mode_error_flag = true;
-  bool error_flag = true;
-  */
+
     
 
   /* ------------ MPPT ----------- */
-  /* Insert logic for handeling MPPT error flag*/
-  
 
-  /*------- Main error flag ------*/
-  /* Insert logic for handeling main error flag*/
 
   /* ------------- Main screen --------------- */
   if(main_screen_flag) {
@@ -586,6 +530,10 @@ void loop() {
 
 
   delay(2);
+
+  /* Close all the opened handles */
+  //Gpu_Hal_Close(phost);
+  //Gpu_Hal_DeInit();
 }
 
 /* Function for start screen*/
@@ -651,46 +599,35 @@ void main_screen() {
     //insert_line(phost, 440, 470, 10, 262);
     //insert_charging(phost, 0.7);
 
-    /*---- For driving mode icon -----*/
-    if(driving_mode_error_flag) {
-      driving_mode_icon(phost, rbg_red[0], rbg_red[1], rbg_red[2], driving_mode_counter, driving_mode_error_flag);
-    } else {
-      driving_mode_icon(phost, rgb_white[0], rgb_white[1], rgb_white[2], driving_mode_counter, driving_mode_error_flag);
-    }
-    /*----- For battery icon --------*/
+    
+    driving_mode_icon(phost, 250, 20, 1, driving_mode_counter, driving_mode_error_flag);
+   
+
     if(battery_error_flag) {
-      volt_battery_icon(phost, rbg_red[0], rbg_red[1], rbg_red[2]);
-    } else {
-      volt_battery_icon(phost, rgb_white[0], rgb_white[1], rgb_white[2]);
+      volt_battery_icon(phost, 250, 20, 1);
     }
-  
-    /*---- For MC icon -------*/
+    //volt_battery_icon(phost, 1, 200, 1);
+
     if(mc_error_flag) {
-      mc_icon(phost, rbg_red[0], rbg_red[1], rbg_red[2]);
-    } else {
-      mc_icon(phost, rgb_white[0], rgb_white[1], rgb_white[2]);
+      mc_icon(phost, 250, 20, 1);
     }
-    
-    /*---- For Solar cell icon -----*/
+    //mc_icon(phost, 1, 200, 1);
+
     if(solar_error_flag) {
-      solar_cell_icon(phost, rbg_red[0], rbg_red[1], rbg_red[2]);
-    } else {
-      solar_cell_icon(phost, rgb_white[0], rgb_white[1], rgb_white[2]);
+      solar_cell_icon(phost, 250, 20, 1);
     }
-    
-    /*------- For main error flag -------*/
+    //solar_cell_icon(phost, 1, 200, 1);
+
     if(error_flag) {
-      error_icon(phost, rbg_red[0], rbg_red[1], rbg_red[2]);
-    } else {
-      error_icon(phost, rgb_white[0], rgb_white[1], rgb_white[2]);
+      error_icon(phost, 250, 20, 1);
     }
-    
+    //error_icon(phost, 1, 200, 1);
 
     if(cruise_control_flag) {
       cruise_control_icon(phost, cruise_control_velocity);
     }
     /*----------- Economy --------------*/
-    economy_icon(phost, economy_value);
+    economy_icon(phost, 5);
     
     /*---------- Solar ----------*/
     meter_icon(phost, 410, 465, 30, 200, solar_watt/solar_watt_max);
@@ -701,17 +638,14 @@ void main_screen() {
     /*---------- voltage ----------*/
     meter_icon(phost, 15, 70, 30, 200, PackVoltage/PackVoltageMax);
 
-    /*----- High Beam Symbol ------*/
     if(high_beam_flag) {
       high_beam(phost);   
     }
-    /*---- High voltage symbol -----*/
+
     if(high_voltage_flag)
     {
       high_voltage(phost);
     }
-    /*---- ECO or RACE mode --------*/
-    eco_or_racing_mode(phost, eco_or_race_mode_flag);
 
     Finish_Display(phost);
 }
@@ -765,16 +699,16 @@ void values_screen() {
 /*---------------- CAN BUS -------------------*/
 void update_data(String ID, String data)
 {
-  //////Serial.println("Update values");
+  //Serial.println("Update values");
   if(ID == "1027") //0x403 Velocity Measurement
   {
     //double vehicle_velocity = extractBytesToDecimal(data, 0, 4);
     //double motor_velocity = extractBytesToDecimal(data, 4, 4);
     VehicleVelocity = extractBytesToDecimal(data, 4, 4);
 
-    ////Serial.println("Vehicle velocity: " + String(VehicleVelocity));
-    ////Serial.println("--------------------------------");
-    //////Serial.println("Motor velocity: " + String(MotorVelocity));
+    Serial.println("Vehicle velocity: " + String(VehicleVelocity));
+    Serial.println("--------------------------------");
+    //Serial.println("Motor velocity: " + String(MotorVelocity));
   }
 
   if(ID == "1035") //0x40B MC Temperatures
@@ -784,8 +718,8 @@ void update_data(String ID, String data)
     HeatsinkTemp = extractBytesToDecimal(data, 0, 4);
     MotorTemp = extractBytesToDecimal(data, 4, 4);
 
-    ////Serial.println("Heatsink: " + String(HeatsinkTemp));
-    ////Serial.println("Motor temp: " + String(MotorTemp));
+    Serial.println("Heatsink: " + String(HeatsinkTemp));
+    Serial.println("Motor temp: " + String(MotorTemp));
   }
 
   // ---------------- BMS ------------------------
@@ -804,7 +738,7 @@ void update_data(String ID, String data)
     HighCellVoltage = 0.0001*extractDataMPPT(data, 2, 2);
     AvgCellVoltage = 0.0001*extractDataMPPT(data, 4, 2);
 
-    //////Serial.println("Avg cell: " + String(AvgCellVoltage));
+    //Serial.println("Avg cell: " + String(AvgCellVoltage));
   }
 
   if(ID == "1538")
